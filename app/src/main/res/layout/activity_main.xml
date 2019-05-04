@@ -7,13 +7,85 @@
     tools:context=".MainActivity">
 
     <TextView
-        android:id="@+id/sample_text"
+        android:id="@+id/textView4"
+        android:layout_width="59dp"
+        android:layout_height="37dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginRight="8dp"
+        android:text="Port:"
+        app:layout_constraintEnd_toStartOf="@+id/editText3"
+        app:layout_constraintHorizontal_bias="0.504"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:layout_editor_absoluteY="248dp" />
+
+    <Button
+        android:id="@+id/button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:layout_marginStart="8dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginRight="8dp"
+        android:text="link"
+        app:layout_constraintEnd_toStartOf="@+id/button2"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:layout_editor_absoluteY="341dp" />
+
+    <TextView
+        android:id="@+id/textView3"
+        android:layout_width="59dp"
+        android:layout_height="37dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginRight="8dp"
+        android:text="Ipv6:"
+        app:layout_constraintEnd_toStartOf="@+id/editText2"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:layout_editor_absoluteY="184dp" />
+
+    <EditText
+        android:id="@+id/editText2"
+        android:layout_width="196dp"
+        android:layout_height="44dp"
+        android:layout_marginEnd="28dp"
+        android:layout_marginRight="28dp"
+        android:ems="10"
+        android:inputType="textPersonName"
+        android:text="0:0:0:0:0:0:0:0"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:layout_editor_absoluteY="184dp" />
+
+    <EditText
+        android:id="@+id/editText3"
+        android:layout_width="194dp"
+        android:layout_height="49dp"
+        android:layout_marginEnd="28dp"
+        android:layout_marginRight="28dp"
+        android:ems="10"
+        android:inputType="textPersonName"
+        android:text="8888"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:layout_editor_absoluteY="236dp" />
+
+    <Button
+        android:id="@+id/button2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="56dp"
+        android:layout_marginRight="56dp"
+        android:text="unlink"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:layout_editor_absoluteY="341dp" />
+
+    <TextView
+        android:id="@+id/textView_status"
+        android:layout_width="189dp"
+        android:layout_height="57dp"
+        android:text="Checking network status..."
+        tools:layout_editor_absoluteX="104dp"
+        tools:layout_editor_absoluteY="452dp" />
 
 </android.support.constraint.ConstraintLayout>
