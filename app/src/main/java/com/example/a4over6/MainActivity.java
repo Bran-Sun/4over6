@@ -43,6 +43,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean _backend_run;
     private Thread _backend;
     private MyVpnService _vpnService;
+    private int _mtu;
+    private String _ip_vir, _route, _dns, _search, _session;
 
     // Used to load the 'native-lib' library on application startup.
     static {
@@ -142,7 +144,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         if (resultCode == RESULT_OK) {
             Intent intent = new Intent(this, MyVpnService.class);
-
+            intent.putExtra("ip", _ip_vir);
+            intent.putExtra("MTU", _mtu);
+            intent.putExtra("route", _route);
+            intent.putExtra("dns", _dns);
+            intent.putExtra("search", _search);
+            intent.putExtra("session", _session);
+            intent.putExtra("pipe", _extDir.getAbsoluteFile() + "/" + pipe_write);
             startService(intent);
         }
     }
@@ -154,8 +162,6 @@ public class MainActivity extends AppCompatActivity {
         } else {
             onActivityResult(0, RESULT_OK, null);
         }
-
-
     }
 
     protected String readStatusFromJNI() {
