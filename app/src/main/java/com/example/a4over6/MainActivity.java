@@ -1,7 +1,10 @@
 package com.example.a4over6;
 
+import android.content.Intent;
+import android.net.VpnService;
 import android.os.Environment;
 import android.os.Handler;
+import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -39,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean _backend_run;
     private Thread _backend;
+    private MyVpnService _vpnService;
 
     // Used to load the 'native-lib' library on application startup.
     static {
@@ -52,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
         _extDir = Environment.getExternalStorageDirectory();
 
         _backend_run = false;
+        _vpnService = null;
 
         initBackend();
         initView();
@@ -120,14 +125,37 @@ public class MainActivity extends AppCompatActivity {
         if (infos[0] ==  "1") {  //backend unlink
             //TODO
         } else if (infos[0] == "0") {
-            Runnable run = new Runnable() {
-                @Override
-                public void run() {
-                    _status.setText(msg);
-                }
-            };
-            _handle.post(run);
+            if (_vpnService == null) {
+                Runnable run = new Runnable() {
+                    @Override
+                    public void run() {
+                        _status.setText(msg);
+                    }
+                };
+                _handle.post(run);
+                openVpnService();
+            }
         }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        if (resultCode == RESULT_OK) {
+            Intent intent = new Intent(this, MyVpnService.class);
+
+            startService(intent);
+        }
+    }
+
+    protected void openVpnService() {
+        Intent intent = VpnService.prepare(this);
+        if (intent != null) {
+            startActivityForResult(intent,0);
+        } else {
+            onActivityResult(0, RESULT_OK, null);
+        }
+
+
     }
 
     protected String readStatusFromJNI() {
@@ -141,7 +169,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.d("frontend", "read pipe error");
         }
-
         if (readLen > 0) return new String(_readBuf);
         else return null;
     }
