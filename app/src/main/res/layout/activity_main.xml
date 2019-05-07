@@ -26,7 +26,7 @@
             android:layout_weight="1"
             android:ems="10"
             android:inputType="textPersonName"
-            android:text="0:0:0:0:0:0:0:0" />
+            android:text="2402:f000:4:72:808::6b04" />
     </LinearLayout>
 
     <LinearLayout
@@ -48,7 +48,7 @@
             android:layout_weight="1"
             android:ems="10"
             android:inputType="textPersonName"
-            android:text="8888" />
+            android:text="5678" />
     </LinearLayout>
 
     <LinearLayout

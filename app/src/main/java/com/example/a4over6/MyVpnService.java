@@ -17,9 +17,13 @@ public class MyVpnService extends VpnService {
         int ipv6_socket = intent.getIntExtra("socket", 0);
 
         Builder builder = new Builder();
+        builder.addAddress(intent.getStringExtra("ip_vir"), 24);
         builder.setMtu(intent.getIntExtra("MTU", 1500));
         builder.setSession(intent.getStringExtra("session"));
-        builder.addAddress(intent.getStringExtra("ip_vir"), 24);
+        builder.addRoute(intent.getStringExtra("route"), 24);
+        builder.addDnsServer(intent.getStringExtra("dns0"));
+        builder.addDnsServer(intent.getStringExtra("dns1"));
+        builder.addDnsServer(intent.getStringExtra("dns2"));
         //TODO
 
         ParcelFileDescriptor inter = builder.establish();
@@ -41,6 +45,6 @@ public class MyVpnService extends VpnService {
         }
 
 
-        return super.onStartCommand(intent, flags, startId);
+        return START_STICKY;
     }
 }
