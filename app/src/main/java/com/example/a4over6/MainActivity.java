@@ -196,7 +196,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
-                    _status.setText(msg);
+                    String[] infos = msg.split(" ");
+                    String newMsg = "recv: " + infos[0] + "B/s, " + infos[1] + "个/s send: " + infos[2] + "B/s, " + infos[3] + "个/s";
+                    _status.setText(newMsg);
                 }
             };
             _handle.post(run);

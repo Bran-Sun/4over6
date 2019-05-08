@@ -6,10 +6,10 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <android/log.h>
+#include <errno.h>
 
 #define MAX_DATA_LEN 4096
 #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "backend", __VA_ARGS__);
@@ -63,11 +63,13 @@ int flow_send = 0;
 int cnt_send = 0;
 int flow_recv = 0;
 int cnt_recv = 0;
+int flow_fd = -1;
+
 bool get_tun = false;
+bool do_run = false;
 
 int tunfd = -1;
 timeval last_heart, cur_heart;
-int heart_cnt = 0;
 int timer_cnt;
 const char *flow_pipe_name;
 const char *ip_pipe_name;
@@ -90,22 +92,15 @@ void send_request(int sockfd) {
 
 void send_flow_pipe() {
     //printf("write flow infomation");
-    char buf[20];
+    static char buf[20];
     memset(buf, 0, 20);
     sprintf(buf, "%d %d %d %d ", flow_recv, cnt_recv, flow_send, cnt_send);
     int size;
-    mknod(flow_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
-    int fifo_handle = open(flow_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
-    if (fifo_handle < 0) {
-        printf("open flow pipe error\n");
-        return;
-    }
 
-    size = write(fifo_handle, buf, 20);
+    size = write(flow_fd, buf, 20);
     if (size < 0) {
         printf("write to pipe error\n");
     }
-    close(fifo_handle);
 }
 
 void send_heart_packet(int sockfd) {
@@ -116,7 +111,7 @@ void send_heart_packet(int sockfd) {
 
 void *timer_thread(void *arg) {
     int sockfd = *((int *) arg);
-    while (true) {
+    while (do_run) {
         sleep(1);
         send_flow_pipe();
         flow_recv = 0;
@@ -125,6 +120,7 @@ void *timer_thread(void *arg) {
         cnt_send = 0;
         gettimeofday(&cur_heart, 0);
         int elapse_t = cur_heart.tv_sec - last_heart.tv_sec;
+        printf("elapse_t: %d", elapse_t);
         if (elapse_t < 60) {
             timer_cnt++;
             if (timer_cnt == 20) {
@@ -132,7 +128,8 @@ void *timer_thread(void *arg) {
                 timer_cnt = 0;
             }
         } else {
-            //close socket
+            do_run = false;
+            return NULL;
         }
     }
 }
@@ -167,7 +164,7 @@ void read_fd_pipe() {
         close(fifo_handle);
     }
 
-    while (true) {
+    while (do_run) {
         if (access(ip_pipe_name, F_OK) >= 0) {
             int size = read(fifo_handle, buf, 10);
             if (size < 0) {
@@ -193,7 +190,7 @@ void read_fd_pipe() {
 
 void *read_tun_thread(void *arg) {
     int sockfd = *((int *) arg);
-    while (true) {
+    while (do_run) {
         //printf("read data from tun: %d", tunfd);
         memset(&tun_packet, 0, sizeof(Msg));
         tun_packet.type = 102;
@@ -214,7 +211,8 @@ void write_to_tun() {
 }
 
 void recv_from_server(int sockfd) {
-    while (true) {
+    pthread_t read_tun_t;
+    while (do_run) {
         int len = read(sockfd, (void*)&recv_pack, sizeof(struct Msg));
         if (len < 0) {
             printf("recv error!\n");
@@ -226,7 +224,6 @@ void recv_from_server(int sockfd) {
                 printf("create a tun thread");
                 send_ip_pipe(sockfd);
                 read_fd_pipe();
-                pthread_t read_tun_t;
                 pthread_create(&read_tun_t, NULL, read_tun_thread, (void *) &sockfd);
             }
         } else if (recv_pack.type == 103) {
@@ -240,6 +237,7 @@ void recv_from_server(int sockfd) {
             gettimeofday(&last_heart, 0);
         }
     }
+    pthread_join(read_tun_t, NULL);
 }
 
 }
@@ -254,13 +252,23 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
     const char *ip_pipe = env->GetStringUTFChars(ip_pipe_, 0);
     const char *flow_pipe = env->GetStringUTFChars(flow_pipe_, 0);
 
+    flow_pipe_name = flow_pipe;
+    ip_pipe_name = ip_pipe;
+
     get_tun = false;
+    do_run = true;
+    gettimeofday(&last_heart, 0);
+
+    mknod(flow_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
+    flow_fd = open(flow_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
+    if (flow_fd < 0) {
+        printf("open flow pipe error\n");
+        return;
+    }
 
     printf("start establish network");
     printf("msg size: %d", sizeof(Msg));
     int sockfd;
-    flow_pipe_name = flow_pipe;
-    ip_pipe_name = ip_pipe;
 
     sockfd = socket(AF_INET6, SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -304,6 +312,10 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
     send_request(sockfd);
 
     recv_from_server(sockfd);
+
+    pthread_join(timer_t, NULL);
+
+    close(flow_fd);
 
     env->ReleaseStringUTFChars(ipv6_, ipv6);
     env->ReleaseStringUTFChars(port_, port);
