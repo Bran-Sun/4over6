@@ -63,6 +63,7 @@ int flow_send = 0;
 int cnt_send = 0;
 int flow_recv = 0;
 int cnt_recv = 0;
+bool get_tun = false;
 
 int tunfd = -1;
 timeval last_heart, cur_heart;
@@ -140,8 +141,9 @@ void send_ip_pipe(int sockfd) {
     printf("ip back length: %d", recv_pack.length);
     char buf[100];
     memset(buf, 0, 100);
-    sprintf(buf, "%d %s", sockfd, recv_pack.data);
+    sprintf(buf, "%d %d %s", 0, sockfd, recv_pack.data);
     int size;
+    printf("%s", ip_pipe_name);
     mknod(ip_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
     int fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
     if (fifo_handle < 0) {
@@ -157,55 +159,79 @@ void send_ip_pipe(int sockfd) {
 
 void read_fd_pipe() {
     char buf[10];
+    int flag;
     int fifo_handle;
-    if ((fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT)) < 0) {
+    fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT);
+    if (fifo_handle < 0) {
         printf("open fifo error %d:%s\n", errno, strerror(errno));
-        return;
+        close(fifo_handle);
     }
-    int size = read(fifo_handle, buf, 10);
-    if (size < 0) {
-        printf("read fifo error");
-    } else if (size > 0) {
-        tunfd = atoi(buf);
+
+    while (true) {
+        if (access(ip_pipe_name, F_OK) >= 0) {
+            int size = read(fifo_handle, buf, 10);
+            if (size < 0) {
+                printf("read fifo error");
+                close(fifo_handle);
+                continue;
+            } else if (size > 0) {
+                sscanf(buf, "%d", &flag);
+                if (flag == 1) {
+                    sscanf(buf, "%d %d", &flag, &tunfd);
+                    printf("get tun fd: %d", tunfd);
+                    close(fifo_handle);
+                    get_tun = true;
+                    return;
+                } else {
+                    lseek(fifo_handle, 0, SEEK_SET);
+                }
+            }
+        }
     }
-    printf("get tun fd: %d", tunfd);
-    close(fifo_handle);
+
 }
 
 void *read_tun_thread(void *arg) {
     int sockfd = *((int *) arg);
-    tun_packet.type = 102;
     while (true) {
+        //printf("read data from tun: %d", tunfd);
+        memset(&tun_packet, 0, sizeof(Msg));
+        tun_packet.type = 102;
         tun_packet.length = read(tunfd, tun_packet.data, MAX_DATA_LEN);
         if (tun_packet.length > 0) {
-            printf("send packet");
-            send_msg((char *) &tun_packet, tun_packet.length + sizeof(int) + sizeof(char), sockfd);
+            tun_packet.length += sizeof(int) + sizeof(char);
+            send_msg((char *) &tun_packet, tun_packet.length, sockfd);
         }
     }
 }
 
 void write_to_tun() {
-    ssize_t len = write(tunfd, recv_pack.data, recv_pack.length);
-    if (len < recv_pack.length) {
+    int size_e = sizeof(int) + sizeof(char);
+    ssize_t len = write(tunfd, recv_pack.data, recv_pack.length - size_e);
+    if (len != recv_pack.length - size_e) {
         printf("write to pipe error");
     }
 }
 
 void recv_from_server(int sockfd) {
     while (true) {
-        int len = recv(sockfd, (void*)&recv_pack, sizeof(struct Msg), 0);
+        int len = read(sockfd, (void*)&recv_pack, sizeof(struct Msg));
         if (len < 0) {
             printf("recv error!\n");
-            exit(-1);
+            continue;
         }
 
         if (recv_pack.type == 101) {
-            send_ip_pipe(sockfd);
-            read_fd_pipe();
-            pthread_t read_tun_t;
-            pthread_create(&read_tun_t, NULL, read_tun_thread, (void *) &sockfd);
+            if (!get_tun) {
+                printf("create a tun thread");
+                send_ip_pipe(sockfd);
+                read_fd_pipe();
+                pthread_t read_tun_t;
+                pthread_create(&read_tun_t, NULL, read_tun_thread, (void *) &sockfd);
+            }
         } else if (recv_pack.type == 103) {
-            printf("recv packet");
+            printf("recv packet content: %s", recv_pack.data);
+            printf("packet len:%d", recv_pack.length);
             write_to_tun();
             flow_recv += recv_pack.length;
             cnt_recv++;
@@ -228,7 +254,10 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
     const char *ip_pipe = env->GetStringUTFChars(ip_pipe_, 0);
     const char *flow_pipe = env->GetStringUTFChars(flow_pipe_, 0);
 
+    get_tun = false;
+
     printf("start establish network");
+    printf("msg size: %d", sizeof(Msg));
     int sockfd;
     flow_pipe_name = flow_pipe;
     ip_pipe_name = ip_pipe;
@@ -241,21 +270,28 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
 
     int port_t = atoi(port);
 
+    printf("port: %d", port_t);
     struct sockaddr_in6 dest;
 
     bzero(&dest, sizeof(dest));
     dest.sin6_family = AF_INET6;
     dest.sin6_port = htons(port_t);
 
+    printf("ipv6 %s", ipv6);
     int ret = inet_pton(AF_INET6, ipv6, &(dest.sin6_addr));
     if (ret <= 0) {
         printf("get ipv6 error\n");
         return;
     }
 
+    //int on = 1;
+    //setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
+    //bind(sockfd, (struct sockaddr*)&client, sizeof(client));
+
+    printf("start connect");
     ret = connect(sockfd, (struct sockaddr*)&dest, sizeof(dest));
     if (ret < 0) {
-        printf("connect error\n");
+        printf("connect error%d:%s\n", errno, strerror(errno));
         return;
     }
 

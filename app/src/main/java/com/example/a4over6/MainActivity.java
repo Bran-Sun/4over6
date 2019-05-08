@@ -1,10 +1,14 @@
 package com.example.a4over6;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.VpnService;
 import android.os.Environment;
 import android.os.Handler;
 import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -19,7 +23,9 @@ import java.io.FileInputStream;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -47,6 +53,40 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private String[] _dns;
     boolean ip_flag;
 
+    String[] permissions = new String[]{
+            Manifest.permission.INTERNET,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.BIND_VPN_SERVICE
+    };
+
+    private boolean checkPermissions() {
+        int result;
+        List<String> listPermissionsNeeded = new ArrayList<>();
+        for (String p : permissions) {
+            result = ContextCompat.checkSelfPermission(this, p);
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                listPermissionsNeeded.add(p);
+            }
+        }
+        if (!listPermissionsNeeded.isEmpty()) {
+            ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[listPermissionsNeeded.size()]), 100);
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+        if (requestCode == 100) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // do something
+            }
+            return;
+        }
+    }
+
     // Used to load the 'native-lib' library on application startup.
     static {
         System.loadLibrary("native-lib");
@@ -56,6 +96,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        checkPermissions();
         _extDir = Environment.getExternalStorageDirectory();
 
         ip_flag = false;
@@ -63,16 +104,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         _vpnService = null;
         _dns = new String[3];
 
-        _mtu = 4096;
+        _mtu = 1500;
         _session = "android VPN";
 
         File f = new File(_extDir.toString() + "/" + ip_pipe);
-        f.delete();
-        f = new File(_extDir.toString() + "/" + flow_pipe);
-        f.delete();
+        if (f.exists()) {
+            f.delete();
+        }
+        File f2 = new File(_extDir.toString() + "/" + flow_pipe);
+        if (f2.exists()) {
+            f2.delete();
+        }
 
         initView();
         checkNetwork();
+
         startTimer();
     }
 
@@ -127,13 +173,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d("frontend", "ip error");
                 return;
             }
-            Log.d("front end", "establish vpnservice");
-            _protect_socket = Integer.parseInt(infos[0]);
-            _ip_vir = infos[1];
-            _route = infos[2];
-            _dns[0] = infos[3];
-            _dns[1] = infos[4];
-            _dns[2] = infos[5];
+            Log.d("frontend", "establish vpnservice");
+            _protect_socket = Integer.parseInt(infos[1]);
+            _ip_vir = infos[2];
+            _route = infos[3];
+            _dns[0] = infos[4];
+            _dns[1] = infos[5];
+            _dns[2] = infos[6];
             ip_flag = true;
 
             if (_vpnService == null) {
@@ -147,7 +193,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 openVpnService();
             }
         } else {
-            _status.setText(msg);
+            Runnable run = new Runnable() {
+                @Override
+                public void run() {
+                    _status.setText(msg);
+                }
+            };
+            _handle.post(run);
         }
 
     }
@@ -155,22 +207,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         if (resultCode == RESULT_OK) {
-            Intent intent = new Intent(this, MyVpnService.class);
+            Intent intent = new Intent( this, MyVpnService.class);
             intent.putExtra("pipe", _extDir.getAbsoluteFile() + "/" + ip_pipe);
             intent.putExtra("socket", _protect_socket);
-            intent.putExtra("ip", _ip_vir);
+            intent.putExtra("ip_vir", _ip_vir);
             intent.putExtra("MTU", _mtu);
             intent.putExtra("session", _session);
             intent.putExtra("route", _route);
             intent.putExtra("dns0", _dns[0]);
             intent.putExtra("dns1", _dns[1]);
             intent.putExtra("dns2", _dns[2]);
+            Log.d("frontend", "start vpn service");
             startService(intent);
+            Log.d("frontend", "start over");
         }
     }
 
     protected void openVpnService() {
-        Intent intent = VpnService.prepare(this);
+        Intent intent = VpnService.prepare(MainActivity.this);
         if (intent != null) {
             startActivityForResult(intent,0);
         } else {
@@ -235,6 +289,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     //only for click
     @Override
     public void onClick(View v) {
+        Log.d("frontend", "click link");
         if (!_backend_run) {
             _backend = new BackendThread(this, _ipv6.getText().toString(), _port.getText().toString(), _extDir.toString() + "/" + ip_pipe, _extDir.toString() + "/" + flow_pipe);
             _backend.start();
