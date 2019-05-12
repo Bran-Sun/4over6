@@ -1,8 +1,12 @@
 package com.example.a4over6;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import java.io.BufferedOutputStream;
@@ -11,6 +15,32 @@ import java.io.FileOutputStream;
 
 public class MyVpnService extends VpnService {
     ParcelFileDescriptor inter;
+
+    private BroadcastReceiver stopBr = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d("vpn service", "destroy service");
+            if ("stop_kill".equals(intent.getAction())) {
+                try {
+                    if (inter != null) {
+                        inter.close();
+                        inter = null;
+                    }
+                } catch (Exception e) {
+                    Log.d("vpnService", e.toString());
+                }
+                stopSelf();
+            }
+        }
+    };
+
+    @Override
+    public void onCreate() {
+        LocalBroadcastManager lbm =
+                LocalBroadcastManager.getInstance(this);
+        lbm.registerReceiver(stopBr, new IntentFilter("stop_kill"));
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d("frontend", "on command");
@@ -46,14 +76,21 @@ public class MyVpnService extends VpnService {
         } catch (Exception e) {
             Log.d("Frontend write error:", e.getMessage());
         }
-
-
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        // TODO Auto-generated method stub
+        Log.d("vpn service", "destroy service");
+        try {
+            if (inter != null) {
+                inter.close();
+                inter = null;
+            }
+        } catch (Exception e) {
+            Log.d("vpnService", e.toString());
+        }
+        stopSelf();
         super.onDestroy();
     }
 }

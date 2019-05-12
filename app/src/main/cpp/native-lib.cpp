@@ -73,6 +73,8 @@ timeval last_heart, cur_heart;
 int timer_cnt;
 const char *flow_pipe_name;
 const char *ip_pipe_name;
+pthread_mutex_t mutex_info, mutex_run;
+int sockfd;
 
 void send_msg(char *msg, int length, int sockfd) {
     int len = send(sockfd, msg, (size_t) length, 0);
@@ -90,9 +92,16 @@ void send_request(int sockfd) {
     send_msg((char *) &request_pack, whole_len, sockfd);
 }
 
+bool get_dorun() {
+    pthread_mutex_lock(&mutex_run);
+    bool ret = do_run;
+    pthread_mutex_unlock(&mutex_run);
+    return ret;
+}
+
 void send_flow_pipe() {
     //printf("write flow infomation");
-    static char buf[20];
+    char buf[20];
     memset(buf, 0, 20);
     sprintf(buf, "%d %d %d %d ", flow_recv, cnt_recv, flow_send, cnt_send);
     int size;
@@ -111,13 +120,16 @@ void send_heart_packet(int sockfd) {
 
 void *timer_thread(void *arg) {
     int sockfd = *((int *) arg);
-    while (do_run) {
+    while (get_dorun()) {
         sleep(1);
         send_flow_pipe();
+
+        pthread_mutex_lock(&mutex_info);
         flow_recv = 0;
         cnt_recv = 0;
         flow_send = 0;
         cnt_send = 0;
+        pthread_mutex_unlock(&mutex_info);
         gettimeofday(&cur_heart, 0);
         int elapse_t = cur_heart.tv_sec - last_heart.tv_sec;
         printf("elapse_t: %d", elapse_t);
@@ -132,6 +144,8 @@ void *timer_thread(void *arg) {
             return NULL;
         }
     }
+    printf("timer thread leave");
+    return NULL;
 }
 
 void send_ip_pipe(int sockfd) {
@@ -140,7 +154,6 @@ void send_ip_pipe(int sockfd) {
     memset(buf, 0, 100);
     sprintf(buf, "%d %d %s", 0, sockfd, recv_pack.data);
     int size;
-    printf("%s", ip_pipe_name);
     mknod(ip_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
     int fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
     if (fifo_handle < 0) {
@@ -154,52 +167,24 @@ void send_ip_pipe(int sockfd) {
     close(fifo_handle);
 }
 
-void read_fd_pipe() {
-    char buf[10];
-    int flag;
-    int fifo_handle;
-    fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT);
-    if (fifo_handle < 0) {
-        printf("open fifo error %d:%s\n", errno, strerror(errno));
-        close(fifo_handle);
-    }
-
-    while (do_run) {
-        if (access(ip_pipe_name, F_OK) >= 0) {
-            int size = read(fifo_handle, buf, 10);
-            if (size < 0) {
-                printf("read fifo error");
-                close(fifo_handle);
-                continue;
-            } else if (size > 0) {
-                sscanf(buf, "%d", &flag);
-                if (flag == 1) {
-                    sscanf(buf, "%d %d", &flag, &tunfd);
-                    printf("get tun fd: %d", tunfd);
-                    close(fifo_handle);
-                    get_tun = true;
-                    return;
-                } else {
-                    lseek(fifo_handle, 0, SEEK_SET);
-                }
-            }
-        }
-    }
-
-}
-
 void *read_tun_thread(void *arg) {
+    while (!get_tun) ;
     int sockfd = *((int *) arg);
-    while (do_run) {
-        //printf("read data from tun: %d", tunfd);
+    while (get_dorun()) {
         memset(&tun_packet, 0, sizeof(Msg));
         tun_packet.type = 102;
         tun_packet.length = read(tunfd, tun_packet.data, MAX_DATA_LEN);
         if (tun_packet.length > 0) {
             tun_packet.length += sizeof(int) + sizeof(char);
             send_msg((char *) &tun_packet, tun_packet.length, sockfd);
+            pthread_mutex_lock(&mutex_info);
+            cnt_send++;
+            flow_send += tun_packet.length;
+            pthread_mutex_unlock(&mutex_info);
         }
     }
+    printf("read from tun leave");
+    return NULL;
 }
 
 void write_to_tun() {
@@ -212,7 +197,7 @@ void write_to_tun() {
 
 void recv_from_server(int sockfd) {
     pthread_t read_tun_t;
-    while (do_run) {
+    while (get_dorun()) {
         int len = read(sockfd, (void*)&recv_pack, sizeof(struct Msg));
         if (len < 0) {
             printf("recv error!\n");
@@ -221,23 +206,89 @@ void recv_from_server(int sockfd) {
 
         if (recv_pack.type == 101) {
             if (!get_tun) {
-                printf("create a tun thread");
+                printf("send back ip info");
                 send_ip_pipe(sockfd);
-                read_fd_pipe();
                 pthread_create(&read_tun_t, NULL, read_tun_thread, (void *) &sockfd);
             }
         } else if (recv_pack.type == 103) {
             printf("recv packet content: %s", recv_pack.data);
             printf("packet len:%d", recv_pack.length);
             write_to_tun();
+            pthread_mutex_lock(&mutex_info);
             flow_recv += recv_pack.length;
             cnt_recv++;
+            pthread_mutex_unlock(&mutex_info);
         } else if (recv_pack.type == 104) {
             printf("recv heartbeat");
             gettimeofday(&last_heart, 0);
         }
     }
-    pthread_join(read_tun_t, NULL);
+    printf("recv from server leave");
+    if (get_tun) {
+        pthread_join(read_tun_t, NULL);
+    }
+}
+
+void send_stop_info(const char* msg) {
+    char buf[100];
+    int size = 0;
+    size = sprintf(buf, "%d %s", 2, msg);
+    mknod(ip_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
+    int fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
+    if (fifo_handle < 0) {
+        printf("open ip pipe error\n");
+        return;
+    }
+    size = write(fifo_handle, buf, size);
+    if (size < 0) {
+        printf("write to pipe error\n");
+    }
+    close(fifo_handle);
+}
+
+void *read_ip_pipe(void *arg) {
+    char buf[100];
+    bool isOpen = false;
+    int flag;
+    int fifo_handle;
+
+
+    while (get_dorun()) {
+        if (!isOpen) {
+            fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT);
+            if (fifo_handle < 0) {
+                printf("open fifo error %d:%s\n", errno, strerror(errno));
+                close(fifo_handle);
+                continue;
+            } else {
+                isOpen = true;
+            }
+        }
+        int size = read(fifo_handle, buf, 100);
+        if (size < 0) {
+            printf("read ip pipe error");
+            close(fifo_handle);
+            isOpen = false;
+            continue;
+        } else if (size > 0) {
+            sscanf(buf, "%d", &flag);
+            if (flag == 1) {
+                if (!get_tun) {
+                    sscanf(buf, "%d %d", &flag, &tunfd);
+                    printf("get tun fd: %d", tunfd);
+                    close(fifo_handle);
+                    get_tun = true;
+                }
+            } else if (flag == 3) {
+                printf("start to unlink");
+                do_run = false;
+            } else {
+                lseek(fifo_handle, 0, SEEK_SET);
+            }
+        }
+    }
+    printf("read ip leave");
+    return NULL;
 }
 
 }
@@ -252,27 +303,44 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
     const char *ip_pipe = env->GetStringUTFChars(ip_pipe_, 0);
     const char *flow_pipe = env->GetStringUTFChars(flow_pipe_, 0);
 
+    //initialize
     flow_pipe_name = flow_pipe;
     ip_pipe_name = ip_pipe;
 
     get_tun = false;
-    do_run = true;
     gettimeofday(&last_heart, 0);
+    pthread_mutex_init(&mutex_info, NULL);
+    pthread_mutex_init(&mutex_run, NULL);
+    do_run = true;
 
     mknod(flow_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
     flow_fd = open(flow_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
     if (flow_fd < 0) {
-        printf("open flow pipe error\n");
+        send_stop_info("open flow pipe error\n");
+
+        env->ReleaseStringUTFChars(ipv6_, ipv6);
+        env->ReleaseStringUTFChars(port_, port);
+        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
+        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+        pthread_mutex_destroy(&mutex_info);
+        pthread_mutex_destroy(&mutex_run);
         return;
     }
 
     printf("start establish network");
     printf("msg size: %d", sizeof(Msg));
-    int sockfd;
+    sockfd;
 
     sockfd = socket(AF_INET6, SOCK_STREAM, 0);
     if (sockfd < 0) {
-        printf("create socket error!\n");
+        send_stop_info("create socket error!\n");
+
+        env->ReleaseStringUTFChars(ipv6_, ipv6);
+        env->ReleaseStringUTFChars(port_, port);
+        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
+        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+        pthread_mutex_destroy(&mutex_info);
+        pthread_mutex_destroy(&mutex_run);
         return;
     }
 
@@ -288,7 +356,14 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
     printf("ipv6 %s", ipv6);
     int ret = inet_pton(AF_INET6, ipv6, &(dest.sin6_addr));
     if (ret <= 0) {
-        printf("get ipv6 error\n");
+        send_stop_info("get ipv6 error\n");
+
+        env->ReleaseStringUTFChars(ipv6_, ipv6);
+        env->ReleaseStringUTFChars(port_, port);
+        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
+        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+        pthread_mutex_destroy(&mutex_info);
+        pthread_mutex_destroy(&mutex_run);
         return;
     }
 
@@ -299,31 +374,52 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
     printf("start connect");
     ret = connect(sockfd, (struct sockaddr*)&dest, sizeof(dest));
     if (ret < 0) {
-        printf("connect error%d:%s\n", errno, strerror(errno));
+        printf("connect error %d:%s\n", errno, strerror(errno));
+        send_stop_info("connect error\n");
+
+        env->ReleaseStringUTFChars(ipv6_, ipv6);
+        env->ReleaseStringUTFChars(port_, port);
+        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
+        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+        pthread_mutex_destroy(&mutex_info);
+        pthread_mutex_destroy(&mutex_run);
         return;
     }
 
     printf("finish establish ipv6 connect\n");
 
     //start timer
-    pthread_t timer_t;
+    pthread_t timer_t, read_ip_t;
     pthread_create(&timer_t, NULL, timer_thread, (void*)&sockfd);
+    pthread_create(&read_ip_t, NULL, read_ip_pipe, NULL);
 
     send_request(sockfd);
 
     recv_from_server(sockfd);
 
     pthread_join(timer_t, NULL);
+    pthread_join(read_ip_t, NULL);
+    pthread_mutex_destroy(&mutex_info);
+    pthread_mutex_destroy(&mutex_run);
 
     close(flow_fd);
+    close(sockfd);
+    send_stop_info("unlink");
+    printf("backend leave");
 
     env->ReleaseStringUTFChars(ipv6_, ipv6);
     env->ReleaseStringUTFChars(port_, port);
     env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
     env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+}
 
-    env->ReleaseStringUTFChars(ipv6_, ipv6);
-    env->ReleaseStringUTFChars(port_, port);
-    env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
-    env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_a4over6_MainActivity_backend_1unlink(JNIEnv *env, jobject instance) {
+    pthread_mutex_lock(&mutex_run);
+    do_run = false;
+    pthread_mutex_unlock(&mutex_run);
+    printf("get unlink sign");
+    shutdown(sockfd, SHUT_RDWR);
+    close(sockfd);
 }
