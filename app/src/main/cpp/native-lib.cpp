@@ -103,13 +103,15 @@ void send_flow_pipe() {
     //printf("write flow infomation");
     char buf[20];
     memset(buf, 0, 20);
-    sprintf(buf, "%d %d %d %d ", flow_recv, cnt_recv, flow_send, cnt_send);
+    int bs = sprintf(buf, "%d %d %d %d ", flow_recv, cnt_recv, flow_send, cnt_send);
     int size;
 
-    size = write(flow_fd, buf, 20);
+    lseek(flow_fd, 0, SEEK_SET);
+    size = write(flow_fd, buf, bs);
     if (size < 0) {
         printf("write to pipe error\n");
     }
+    printf("send flow info: %s", buf);
 }
 
 void send_heart_packet(int sockfd) {
@@ -132,7 +134,7 @@ void *timer_thread(void *arg) {
         pthread_mutex_unlock(&mutex_info);
         gettimeofday(&cur_heart, 0);
         int elapse_t = cur_heart.tv_sec - last_heart.tv_sec;
-        printf("elapse_t: %d", elapse_t);
+        //printf("elapse_t: %d", elapse_t);
         if (elapse_t < 60) {
             timer_cnt++;
             if (timer_cnt == 20) {

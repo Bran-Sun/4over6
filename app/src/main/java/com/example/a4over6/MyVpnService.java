@@ -64,7 +64,7 @@ public class MyVpnService extends VpnService {
         Integer fd = inter.getFd();
         Log.d("vpnService", fd.toString());
 
-        String fd_buf = "1 " + fd.toString();
+        String fd_buf = "1 " + fd.toString() + " ";
 
         try {
             File file = new File(filename);
