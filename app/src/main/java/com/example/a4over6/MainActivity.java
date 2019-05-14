@@ -37,7 +37,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private EditText _ipv6, _port;
     private Button _link, _unlink;
-    private TextView _status; //when starting, checking the network status
+    private TextView _status, _flow; //when starting, checking the network status
 
     private TimerTask _task_ip, _task_flow;
     private Timer _timer_ip, _timer_flow;
@@ -56,6 +56,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private String _ip_vir, _route, _session;
     private String[] _dns;
     boolean ip_flag;
+
+    private String _localip, _destip, _destport;
 
     //Ask for permissions
     String[] permissions = new String[]{
@@ -122,8 +124,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements(); ) {
                     InetAddress inetAddress = enumIpAddr.nextElement();
                     if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet6Address) {
-                        String ipaddress = inetAddress.getHostAddress();
-                        _status.setText("find ipv6 address: " + ipaddress);
+                        _localip = inetAddress.getHostAddress();
+                        int index = _localip.indexOf('%');
+                        if (index > 0) _localip = _localip.substring(0, index);
+                        _status.setText("find ipv6 address: " + _localip);
                         _link.setEnabled(true);
                         return;
                     }
@@ -155,6 +159,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         _port = (EditText)findViewById(R.id.editText_port);
         _link = (Button)findViewById(R.id.button_link);
         _unlink = (Button)findViewById(R.id.button_unlink);
+        _flow = (TextView)findViewById(R.id.textView_flow);
         _status = (TextView)findViewById(R.id.textView_status);
 
         initLinkBtn();
@@ -200,6 +205,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     }
                 }
             };
+            _destip = _ipv6.getText().toString();
+            _destport = _port.getText().toString();
             _backend = new BackendThread(this,_extDir.toString() + "/" + ip_pipe, _extDir.toString() + "/" + flow_pipe);
             _backend.set_ip_port(_ipv6.getText().toString(), _port.getText().toString());
             ip_flag = false;
@@ -255,7 +262,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Runnable run = new Runnable() {
                     @Override
                     public void run() {
-                        _status.setText("establish socket!");
+                        //_status.setText("establish socket!");
+                        _status.setText("local ip: " + _localip + "\ndest ip: " + _destip + "\ndest port: " + _destip);
                     }
                 };
                 _handle.post(run);
@@ -271,6 +279,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     public void run() {
                         Log.d("frontend", "backend " + errorMsg);
                         _status.setText(errorMsg);
+                        _flow.setText("");
                     }
                 };
                 _handle.post(run);
@@ -297,8 +306,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             public void run() {
                 String[] infos = msg.split(" ");
                 if (infos.length < 5) return;
-                String newMsg = "recv speed: " + getFlow(infos[0]) + "/s, recv data: " + getFlow(infos[1]) + "\nsend: " + getFlow(infos[2]) + "/s, send data: " + getFlow(infos[3]) + "\n link time: " +  getTime(infos[4]);
-                _status.setText(newMsg);
+                String newMsg = "recv speed: " + getFlow(infos[0]) + "/s\nrecv data: " + getFlow(infos[1]) + "\nsend: " + getFlow(infos[2]) + "/s\nsend data: " + getFlow(infos[3]) + "\nlink time: " +  getTime(infos[4]);
+                _flow.setText(newMsg);
             }
         };
         _handle.post(run);

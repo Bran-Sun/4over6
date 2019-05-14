@@ -143,6 +143,8 @@ void *timer_thread(void *arg) {
             }
         } else {
             do_run = false;
+            shutdown(sockfd, SHUT_RDWR);
+            close(sockfd);
             return NULL;
         }
     }
@@ -234,7 +236,7 @@ void recv_from_server(int sockfd) {
 void send_stop_info(const char* msg) {
     char buf[100];
     int size = 0;
-    size = sprintf(buf, "%d %s", 2, msg);
+    size = sprintf(buf, "%d %s ", 2, msg);
     buf[size] = '\0';
     size++;
     mknod(ip_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
@@ -373,11 +375,6 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
         pthread_mutex_destroy(&mutex_run);
         return;
     }
-
-    //int on = 1;
-    //setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
-    //bind(sockfd, (struct sockaddr*)&client, sizeof(client));
-
     printf("start connect");
     ret = connect(sockfd, (struct sockaddr*)&dest, sizeof(dest));
     if (ret < 0) {

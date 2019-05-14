@@ -783,6 +783,7 @@ id text
 id text2
 id textSpacerNoButtons
 id textSpacerNoTitle
+id textView_flow
 id textView_ip
 id textView_port
 id textView_status

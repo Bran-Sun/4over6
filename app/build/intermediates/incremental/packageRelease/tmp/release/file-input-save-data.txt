@@ -1,5 +1,5 @@
 #Internal package file, do not edit.
-#Tue May 14 14:12:41 CST 2019
+#Tue May 14 18:14:30 CST 2019
 2.base=/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/transforms/stripDebugSymbol/release/0
 0.path=lib/arm64-v8a/libnative-lib.so
 2.baseType=DIRECTORY
