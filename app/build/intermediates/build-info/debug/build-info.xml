@@ -1,35 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <instant-run
-    abi="arm64-v8a,armeabi-v7a,armeabi"
-    api-level="26"
+    abi="x86"
+    api-level="28"
     build-mode="COLD"
-    density="xxhdpi"
+    density="420dpi"
     format="10"
+    ir-eligibility="COMPATIBLE"
     plugin-version="3.4.0"
-    timestamp="1557657820818"
+    timestamp="1557817306893"
     token="-7377511162532719344"
     verifier="COLD_SWAP_REQUESTED" >
 
     <task
         name="javac"
-        duration="0" />
+        duration="111" />
     <task
         name="instant-run-dex"
         duration="0" />
     <task
         name="instant-run-transform"
-        duration="0" />
+        duration="18" />
     <task
         name="verifier"
-        duration="0" />
+        duration="4" />
 
     <artifact
-        location="/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/instant-run-apk/debug/app-debug.apk"
-        type="SPLIT_MAIN" />
+        location="/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/split-apk/debug/slices/slice_8.apk"
+        type="SPLIT" />
 
     <build
         build-mode="FULL"
-        timestamp="1557656580265"
+        timestamp="1557816423631"
         verifier="FULL_BUILD_REQUESTED" >
         <artifact
             location="/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/split-apk/debug/slices/slice_8.apk"
@@ -73,20 +74,20 @@
     </build>
     <build
         build-mode="COLD"
-        ir-eligibility="COMPATIBLE"
-        timestamp="1557657402874"
-        verifier="COLD_SWAP_REQUESTED" >
-        <artifact
-            location="/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/split-apk/debug/slices/slice_8.apk"
-            type="SPLIT" />
-    </build>
-    <build
-        build-mode="COLD"
-        timestamp="1557657820818"
+        timestamp="1557817187429"
         verifier="COLD_SWAP_REQUESTED" >
         <artifact
             location="/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/instant-run-apk/debug/app-debug.apk"
             type="SPLIT_MAIN" />
+    </build>
+    <build
+        build-mode="COLD"
+        ir-eligibility="COMPATIBLE"
+        timestamp="1557817306893"
+        verifier="COLD_SWAP_REQUESTED" >
+        <artifact
+            location="/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/split-apk/debug/slices/slice_8.apk"
+            type="SPLIT" />
     </build>
 
 </instant-run>

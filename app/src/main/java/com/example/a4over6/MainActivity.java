@@ -296,11 +296,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void run() {
                 String[] infos = msg.split(" ");
-                String newMsg = "recv: " + infos[0] + "B/s, " + infos[1] + "个/s send: " + infos[2] + "B/s, " + infos[3] + "个/s";
+                if (infos.length < 5) return;
+                String newMsg = "recv speed: " + getFlow(infos[0]) + "/s, recv data: " + getFlow(infos[1]) + "\nsend: " + getFlow(infos[2]) + "/s, send data: " + getFlow(infos[3]) + "\n link time: " +  getTime(infos[4]);
                 _status.setText(newMsg);
             }
         };
         _handle.post(run);
+    }
+
+    protected String getFlow(String s) {
+        if (s.isEmpty()) return "0B";
+        Double d = Double.parseDouble(s);
+        int cnt = 0;
+        while (d > 1024) {
+            d = d / 1024;
+            cnt++;
+        }
+        String format = String.format("%.2f", d);
+        if (cnt == 0) return format + "B";
+        else if (cnt == 1) return format + "KB";
+        else if (cnt == 2) return format + "MB";
+        else return format + "GB";
+    }
+
+    protected String getTime(String s) {
+        Integer wholeTime = Integer.parseInt(s);
+        Integer hour, min, sec;
+        sec = wholeTime % 60;
+        hour = wholeTime / 3600;
+        min = (wholeTime / 60) % 60;
+        return hour.toString() + ":" + min.toString() + ":" + sec.toString();
     }
 
     protected String readPipeInfo(String read_pipe) {

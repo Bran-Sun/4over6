@@ -60,16 +60,16 @@ struct Msg {
 } request_pack, recv_pack, tun_packet, heart_packet;
 
 int flow_send = 0;
-int cnt_send = 0;
+int whole_send = 0;
 int flow_recv = 0;
-int cnt_recv = 0;
+int whole_recv = 0;
 int flow_fd = -1;
 
 bool get_tun = false;
 bool do_run = false;
 
 int tunfd = -1;
-timeval last_heart, cur_heart;
+timeval last_heart, cur_heart, init_time;
 int timer_cnt;
 const char *flow_pipe_name;
 const char *ip_pipe_name;
@@ -101,9 +101,11 @@ bool get_dorun() {
 
 void send_flow_pipe() {
     //printf("write flow infomation");
-    char buf[20];
-    memset(buf, 0, 20);
-    int bs = sprintf(buf, "%d %d %d %d ", flow_recv, cnt_recv, flow_send, cnt_send);
+    char buf[50];
+    memset(buf, 0, 50);
+
+    int elapse = cur_heart.tv_sec - init_time.tv_sec;
+    int bs = sprintf(buf, "%d %d %d %d %d ", flow_recv, whole_recv, flow_send, whole_send, elapse);
     int size;
 
     lseek(flow_fd, 0, SEEK_SET);
@@ -124,16 +126,14 @@ void *timer_thread(void *arg) {
     int sockfd = *((int *) arg);
     while (get_dorun()) {
         sleep(1);
+        gettimeofday(&cur_heart, 0);
+        int elapse_t = cur_heart.tv_sec - last_heart.tv_sec;
         send_flow_pipe();
 
         pthread_mutex_lock(&mutex_info);
         flow_recv = 0;
-        cnt_recv = 0;
         flow_send = 0;
-        cnt_send = 0;
         pthread_mutex_unlock(&mutex_info);
-        gettimeofday(&cur_heart, 0);
-        int elapse_t = cur_heart.tv_sec - last_heart.tv_sec;
         //printf("elapse_t: %d", elapse_t);
         if (elapse_t < 60) {
             timer_cnt++;
@@ -180,7 +180,7 @@ void *read_tun_thread(void *arg) {
             tun_packet.length += sizeof(int) + sizeof(char);
             send_msg((char *) &tun_packet, tun_packet.length, sockfd);
             pthread_mutex_lock(&mutex_info);
-            cnt_send++;
+            whole_send += tun_packet.length;
             flow_send += tun_packet.length;
             pthread_mutex_unlock(&mutex_info);
         }
@@ -218,7 +218,7 @@ void recv_from_server(int sockfd) {
             write_to_tun();
             pthread_mutex_lock(&mutex_info);
             flow_recv += recv_pack.length;
-            cnt_recv++;
+            whole_recv += recv_pack.length;
             pthread_mutex_unlock(&mutex_info);
         } else if (recv_pack.type == 104) {
             printf("recv heartbeat");
@@ -235,6 +235,8 @@ void send_stop_info(const char* msg) {
     char buf[100];
     int size = 0;
     size = sprintf(buf, "%d %s", 2, msg);
+    buf[size] = '\0';
+    size++;
     mknod(ip_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
     int fifo_handle = open(ip_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
     if (fifo_handle < 0) {
@@ -311,9 +313,12 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
 
     get_tun = false;
     gettimeofday(&last_heart, 0);
+    gettimeofday(&init_time, 0);
     pthread_mutex_init(&mutex_info, NULL);
     pthread_mutex_init(&mutex_run, NULL);
     do_run = true;
+    whole_recv = 0;
+    whole_send = 0;
 
     mknod(flow_pipe_name, S_IFIFO | 0666, 0);//创建有名管道 
     flow_fd = open(flow_pipe_name, O_RDWR | O_CREAT | O_TRUNC);
