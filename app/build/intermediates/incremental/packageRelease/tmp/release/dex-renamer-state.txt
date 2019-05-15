@@ -1,4 +1,4 @@
-#Tue May 14 18:14:30 CST 2019
+#Tue May 14 19:33:55 CST 2019
 base.0=/Users/sunzhenbo/AndroidStudioProjects/4over6/app/build/intermediates/dex/release/mergeDexRelease/out
 path.0=classes.dex
 renamed.0=classes.dex

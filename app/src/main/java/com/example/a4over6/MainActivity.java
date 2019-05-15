@@ -201,12 +201,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     if (!_backend_run) cancel();
                     final String ans = readPipeInfo(flow_pipe);
                     if (ans != null) {
+                        //Log.d("flow info: ", ans);
                         processMsgFromFlow(ans);
                     }
                 }
             };
             _destip = _ipv6.getText().toString();
-            _destport = _port.getText().toString();
             _backend = new BackendThread(this,_extDir.toString() + "/" + ip_pipe, _extDir.toString() + "/" + flow_pipe);
             _backend.set_ip_port(_ipv6.getText().toString(), _port.getText().toString());
             ip_flag = false;
@@ -250,6 +250,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         String[] infos = msg.split(" ");
         int flag = Integer.parseInt(infos[0]);
         if (flag == 0) {
+            Log.d("frontend", msg);
             _protect_socket = Integer.parseInt(infos[1]);
             _ip_vir = infos[2];
             _route = infos[3];
@@ -329,12 +330,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     protected String getTime(String s) {
-        Integer wholeTime = Integer.parseInt(s);
-        Integer hour, min, sec;
-        sec = wholeTime % 60;
-        hour = wholeTime / 3600;
-        min = (wholeTime / 60) % 60;
-        return hour.toString() + ":" + min.toString() + ":" + sec.toString();
+        try {
+            Integer wholeTime = Integer.parseInt(s);
+            Integer hour, min, sec;
+            sec = wholeTime % 60;
+            hour = wholeTime / 3600;
+            min = (wholeTime / 60) % 60;
+            return hour.toString() + ":" + min.toString() + ":" + sec.toString();
+        } catch (Exception e) {
+            Log.d("frontend", e.toString());
+            return "0:0:0";
+        }
     }
 
     protected String readPipeInfo(String read_pipe) {

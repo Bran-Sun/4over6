@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <android/log.h>
 #include <errno.h>
+#include <netinet/ip.h>
 
 #define MAX_DATA_LEN 4096
 #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "backend", __VA_ARGS__);
@@ -181,10 +182,14 @@ void *read_tun_thread(void *arg) {
         if (tun_packet.length > 0) {
             tun_packet.length += sizeof(int) + sizeof(char);
             send_msg((char *) &tun_packet, tun_packet.length, sockfd);
+
             pthread_mutex_lock(&mutex_info);
             whole_send += tun_packet.length;
             flow_send += tun_packet.length;
             pthread_mutex_unlock(&mutex_info);
+
+            //struct ip *head = (struct ip*)tun_packet.data;
+            //printf("from %s to %s", inet_ntoa(head->ip_src), inet_ntoa(head->ip_dst));
         }
     }
     printf("read from tun leave");
@@ -201,11 +206,22 @@ void write_to_tun() {
 
 void recv_from_server(int sockfd) {
     pthread_t read_tun_t;
+    int header_size = sizeof(int) + sizeof(char);
     while (get_dorun()) {
-        int len = read(sockfd, (void*)&recv_pack, sizeof(struct Msg));
+        int len = read(sockfd, (void*)&recv_pack, header_size);
+        printf("recv packet content: %s", recv_pack.data);
+        printf("packet len:%d", recv_pack.length);
+        len = recv_pack.length - 5;
+
         if (len < 0) {
             printf("recv error!\n");
             continue;
+        }
+
+        for (int i = 0;i < len; i++) {
+            if (recv(sockfd, recv_pack.data + i, 1, 0) <= 0) {
+                printf("recv error");
+            }
         }
 
         if (recv_pack.type == 101) {
@@ -215,8 +231,6 @@ void recv_from_server(int sockfd) {
                 pthread_create(&read_tun_t, NULL, read_tun_thread, (void *) &sockfd);
             }
         } else if (recv_pack.type == 103) {
-            printf("recv packet content: %s", recv_pack.data);
-            printf("packet len:%d", recv_pack.length);
             write_to_tun();
             pthread_mutex_lock(&mutex_info);
             flow_recv += recv_pack.length;
