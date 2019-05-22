@@ -316,7 +316,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     protected String getFlow(String s) {
         if (s.isEmpty()) return "0B";
-        Double d = Double.parseDouble(s);
+        Double d;
+        try {
+            d = Double.parseDouble(s);
+        } catch (Exception e) {
+            return "0B";
+        }
         int cnt = 0;
         while (d > 1024) {
             d = d / 1024;

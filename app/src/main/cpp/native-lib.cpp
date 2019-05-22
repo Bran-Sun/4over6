@@ -10,7 +10,9 @@
 #include <sys/stat.h>
 #include <android/log.h>
 #include <errno.h>
+#include <netinet/tcp.h>
 #include <netinet/ip.h>
+#include <netdb.h>
 
 #define MAX_DATA_LEN 4096
 #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "backend", __VA_ARGS__);
@@ -208,7 +210,21 @@ void recv_from_server(int sockfd) {
     pthread_t read_tun_t;
     int header_size = sizeof(int) + sizeof(char);
     while (get_dorun()) {
-        int len = read(sockfd, (void*)&recv_pack, header_size);
+        int len = 0, recv_n;
+        while (get_dorun() && (len < header_size)) {
+            recv_n = read(sockfd, (char*)&recv_pack + len, header_size);
+            if (recv_n == -1) {
+                usleep(100);
+                continue;
+            } else if (recv_n == 0) {
+
+            } else if (recv_n > 0) {
+                len += recv_n;
+            } else {
+                printf("socket recv error");
+            }
+        }
+
         printf("recv packet content: %s", recv_pack.data);
         printf("packet len:%d", recv_pack.length);
         len = recv_pack.length - 5;
@@ -218,9 +234,18 @@ void recv_from_server(int sockfd) {
             continue;
         }
 
-        for (int i = 0;i < len; i++) {
-            if (recv(sockfd, recv_pack.data + i, 1, 0) <= 0) {
-                printf("recv error");
+        int len_i = 0;
+        while (get_dorun() && (len_i < len)) {
+            recv_n = recv(sockfd, recv_pack.data + len_i, 1, 0);
+            if (recv_n == -1) {
+                usleep(100);
+                continue;
+            } else if (recv_n == 0) {
+
+            } else if (recv_n > 0) {
+                len_i += recv_n;
+            } else {
+                printf("socket recv error");
             }
         }
 
@@ -352,34 +377,15 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
 
     printf("start establish network");
     printf("msg size: %d", sizeof(Msg));
-    sockfd;
 
-    sockfd = socket(AF_INET6, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        send_stop_info("create socket error!\n");
 
-        env->ReleaseStringUTFChars(ipv6_, ipv6);
-        env->ReleaseStringUTFChars(port_, port);
-        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
-        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
-        pthread_mutex_destroy(&mutex_info);
-        pthread_mutex_destroy(&mutex_run);
-        return;
-    }
-
-    int port_t = atoi(port);
-
-    printf("port: %d", port_t);
-    struct sockaddr_in6 dest;
-
-    bzero(&dest, sizeof(dest));
-    dest.sin6_family = AF_INET6;
-    dest.sin6_port = htons(port_t);
-
-    printf("ipv6 %s", ipv6);
-    int ret = inet_pton(AF_INET6, ipv6, &(dest.sin6_addr));
-    if (ret <= 0) {
-        send_stop_info("get ipv6 error\n");
+    int n;
+    struct addrinfo hints, *res, *ressave;
+    bzero(&hints, sizeof (struct addrinfo));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    if ( (n = getaddrinfo (ipv6, port, &hints, &res)) != 0) {
+        send_stop_info("get addrInfo error\n");
 
         env->ReleaseStringUTFChars(ipv6_, ipv6);
         env->ReleaseStringUTFChars(port_, port);
@@ -389,11 +395,35 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
         pthread_mutex_destroy(&mutex_run);
         return;
     }
-    printf("start connect");
-    ret = connect(sockfd, (struct sockaddr*)&dest, sizeof(dest));
-    if (ret < 0) {
-        printf("connect error %d:%s\n", errno, strerror(errno));
-        send_stop_info("connect error\n");
+    ressave = res;
+    do {
+        sockfd = socket (res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sockfd < 0) {
+            printf("v6fd<0");
+            continue;
+        }
+        int enable=1;
+        setsockopt(sockfd,IPPROTO_TCP,TCP_NODELAY,&enable,sizeof(enable));
+        if (sockfd < 0) {
+            printf("close tcp nodelay error");
+            continue;
+        }
+
+        /*ignore this one */
+        if (connect(sockfd, res->ai_addr, res->ai_addrlen) == 0) {
+            /* success */
+            break;
+        } else{
+            printf("connect failed");
+        }
+        close(sockfd);
+        sockfd=-1;
+        /* ignore this one */
+    } while ( (res = res->ai_next) != NULL);
+    if (res == NULL) {
+        /* errno set from final connect2Server() */
+        printf("res == NULL\n");
+        send_stop_info("res == NULL\n");
 
         env->ReleaseStringUTFChars(ipv6_, ipv6);
         env->ReleaseStringUTFChars(port_, port);
@@ -401,8 +431,48 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
         env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
         pthread_mutex_destroy(&mutex_info);
         pthread_mutex_destroy(&mutex_run);
-        return;
+        return ;
     }
+    freeaddrinfo(ressave);
+
+
+//
+//    int port_t = atoi(port);
+//
+//    printf("port: %d", port_t);
+//    struct sockaddr_in6 dest;
+//
+//    bzero(&dest, sizeof(dest));
+//    dest.sin6_family = AF_INET6;
+//    dest.sin6_port = htons(port_t);
+//
+//    printf("ipv6 %s", ipv6);
+//    int ret = inet_pton(AF_INET6, ipv6, &(dest.sin6_addr));
+//    if (ret <= 0) {
+//        send_stop_info("get ipv6 error\n");
+//
+//        env->ReleaseStringUTFChars(ipv6_, ipv6);
+//        env->ReleaseStringUTFChars(port_, port);
+//        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
+//        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+//        pthread_mutex_destroy(&mutex_info);
+//        pthread_mutex_destroy(&mutex_run);
+//        return;
+//    }
+//    printf("start connect");
+//    ret = connect(sockfd, (struct sockaddr*)&dest, sizeof(dest));
+//    if (ret < 0) {
+//        printf("connect error %d:%s\n", errno, strerror(errno));
+//        send_stop_info("connect error\n");
+//
+//        env->ReleaseStringUTFChars(ipv6_, ipv6);
+//        env->ReleaseStringUTFChars(port_, port);
+//        env->ReleaseStringUTFChars(ip_pipe_, ip_pipe);
+//        env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
+//        pthread_mutex_destroy(&mutex_info);
+//        pthread_mutex_destroy(&mutex_run);
+//        return;
+//    }
 
     printf("finish establish ipv6 connect\n");
 
