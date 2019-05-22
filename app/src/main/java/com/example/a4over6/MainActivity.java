@@ -212,7 +212,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             ip_flag = false;
             _vpnIntent = null;
             _backend_run = true;
-
+            
+            _clean_pipes();
             startTimer();
             _backend.start();
         }
@@ -280,7 +281,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     public void run() {
                         Log.d("frontend", "backend " + errorMsg);
                         _status.setText(errorMsg);
-                        _flow.setText("");
                     }
                 };
                 _handle.post(run);
@@ -295,7 +295,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     Intent intent = new Intent("stop_kill");
                     LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
                 }
-                _clean_pipes();
                 Log.d("frontend", "close backend over");
             }
         }

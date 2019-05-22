@@ -393,6 +393,7 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
         env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
         pthread_mutex_destroy(&mutex_info);
         pthread_mutex_destroy(&mutex_run);
+        if (res != NULL) freeaddrinfo(ressave);
         return;
     }
     ressave = res;
@@ -431,6 +432,7 @@ Java_com_example_a4over6_MainActivity_runBackendThread(JNIEnv *env, jobject inst
         env->ReleaseStringUTFChars(flow_pipe_, flow_pipe);
         pthread_mutex_destroy(&mutex_info);
         pthread_mutex_destroy(&mutex_run);
+        freeaddrinfo(ressave);
         return ;
     }
     freeaddrinfo(ressave);
